@@ -48,6 +48,7 @@ x-moonraker-svc: &moonraker-svc
     - /dev/null:/opt/klipper/config/null
     - /dev/null:/opt/klipper/docs/null
     - ./config:/opt/printer_data/config
+    - ./config/moonraker.secrets:/opt/printer_data/moonraker.secrets
     - run:/opt/printer_data/run
     - /home/pi/gcode:/opt/printer_data/gcodes
     - log:/opt/printer_data/logs
