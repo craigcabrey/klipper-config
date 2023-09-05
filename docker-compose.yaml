@@ -55,19 +55,16 @@ x-moonraker-svc: &moonraker-svc
 x-ustreamer-svc: &ustreamer-svc
   image: mkuf/ustreamer:latest
   restart: unless-stopped
-  command: --host=0.0.0.0 --port=8080 --slowdown --device=/dev/webcam --resolution=640x480 --format=MJPEG --desired-fps=30
 
 ## Service Definitions
 services:
-
-  ## Printer1
-  ## Access api via port 8101/tcp and webcam via 8102/tcp
   slowboi-klipper:
     <<: *klipper-svc
     command: -I printer_data/run/slowboi.klipper.tty -a printer_data/run/slowboi.klipper.sock printer_data/config/slowboi.cfg -l printer_data/logs/slowboi.klippy.log
     labels:
       org.prind.service: klipper
       org.prind.printer: slowboi
+
   slowboi-moonraker:
     <<: *moonraker-svc
     command: -d printer_data -c printer_data/config/slowboi.moonraker.conf -l printer_data/logs/slowboi.moonraker.log
@@ -76,24 +73,39 @@ services:
     labels:
       org.prind.service: moonraker
       org.prind.printer: slowboi
+      traefik.enable: true
+      traefik.http.services.slowboi-moonraker.loadbalancer.server.port: 7125
+      traefik.http.routers.slowboi-moonraker.rule: PathPrefix(`/slowboi/websocket`,`/slowboi/printer`,`/slowboi/api`,`/slowboi/access`,`/slowboi/machine`,`/slowboi/server`)
+      traefik.http.routers.slowboi-moonraker.entrypoints: web
+      traefik.http.middlewares.slowboi-prefix.stripprefix.prefixes: /slowboi
+      traefik.http.middlewares.cors.headers.accesscontrolallowmethods: '*'
+      traefik.http.middlewares.cors.headers.accessControlAllowOriginList: '*'
+      traefik.http.middlewares.cors.headers.accesscontrolmaxage: 100
+      traefik.http.middlewares.cors.headers.addvaryheader: true
+      traefik.http.routers.slowboi-moonraker.middlewares: slowboi-prefix, cors
+
   slowboi-webcam:
     <<: *ustreamer-svc
+    command: --host=0.0.0.0 --port=8080 --slowdown --device=/dev/webcam --resolution=640x480 --format=YUYV --desired-fps=30
     devices:
-      - /dev/video0:/dev/webcam
-    ports:
-      - 8102:8080
+      - /dev/v4l/by-id/usb-Generic_USB2.0_PC_CAMERA-video-index0:/dev/webcam
     labels:
       org.prind.service: webcam
       org.prind.printer: slowboi
+      traefik.enable: true
+      traefik.http.services.slowboi-webcam.loadbalancer.server.port: 8080
+      traefik.http.routers.slowboi-webcam.rule: PathPrefix(`/slowboi/webcam`)
+      traefik.http.routers.slowboi-webcam.entrypoints: web
+      traefik.http.middlewares.slowboi-webcam.stripprefix.prefixes: /slowboi/webcam
+      traefik.http.routers.slowboi-webcam.middlewares: slowboi-webcam
 
-  ## Printer2
-  ## Access api via port 8201/tcp and webcam via 8202/tcp
   hugeboi-klipper:
     <<: *klipper-svc
     command: -I printer_data/run/hugeboi.klipper.tty -a printer_data/run/hugeboi.klipper.sock printer_data/config/hugeboi.cfg -l printer_data/logs/hugeboi.klippy.log
     labels:
       org.prind.service: klipper
       org.prind.printer: hugeboi
+
   hugeboi-moonraker:
     <<: *moonraker-svc
     command: -d printer_data -c printer_data/config/hugeboi.moonraker.conf -l printer_data/logs/hugeboi.moonraker.log
@@ -102,15 +114,54 @@ services:
     labels:
       org.prind.service: moonraker
       org.prind.printer: hugeboi
+      traefik.enable: true
+      traefik.http.services.moonraker.loadbalancer.server.port: 7125
+      traefik.http.routers.moonraker.rule: PathPrefix(`/hugeboi/websocket`,`/hugeboi/printer`,`/hugeboi/api`,`/hugeboi/access`,`/hugeboi/machine`,`/hugeboi/server`)
+      traefik.http.routers.moonraker.entrypoints: web
+      traefik.http.middlewares.moonraker.stripprefix.prefixes: /hugeboi
+      traefik.http.routers.moonraker.middlewares: moonraker
+
+  hugeboi-webcam:
+    <<: *ustreamer-svc
+    command: --host=0.0.0.0 --port=8080 --slowdown --device=/dev/webcam --resolution=1920x1080 --format=MJPEG --desired-fps=30
+    devices:
+      - /dev/video19:/dev/webcam
+    labels:
+      org.prind.service: webcam
+      org.prind.printer: hugeboi
+      traefik.enable: true
+      traefik.http.services.hugeboi-webcam.loadbalancer.server.port: 8080
+      traefik.http.routers.hugeboi-webcam.rule: PathPrefix(`/hugeboi/webcam`)
+      traefik.http.routers.hugeboi-webcam.entrypoints: web
+      traefik.http.middlewares.hugeboi-webcam.stripprefix.prefixes: /hugeboi/webcam
+      traefik.http.routers.hugeboi-webcam.middlewares: hugeboi-webcam
 
   ## Use Fluidd as Frontend
   fluidd:
     image: ghcr.io/fluidd-core/fluidd:latest
     restart: unless-stopped
-    ports:
-      - 80:80
     labels:
       org.prind.service: fluidd
+      traefik.enable: true
+      traefik.http.services.fluidd.loadbalancer.server.port: 80
+      traefik.http.routers.fluidd.rule: PathPrefix(`/`)
+      traefik.http.routers.fluidd.entrypoints: web
+
+  ## Loadbalancer/Proxy
+  traefik:
+    image: traefik:v2.5
+    command:
+      - "--accesslog"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    volumes:
+        - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    labels:
+      org.prind.service: traefik
 
 volumes:
   run:
