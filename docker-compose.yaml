@@ -137,17 +137,6 @@ services:
       traefik.http.middlewares.hugeboi-webcam.stripprefix.prefixes: /hugeboi/webcam
       traefik.http.routers.hugeboi-webcam.middlewares: hugeboi-webcam
 
-  ## Use Fluidd as Frontend
-  fluidd:
-    image: ghcr.io/fluidd-core/fluidd:latest
-    restart: unless-stopped
-    labels:
-      org.prind.service: fluidd
-      traefik.enable: true
-      traefik.http.services.fluidd.loadbalancer.server.port: 80
-      traefik.http.routers.fluidd.rule: PathPrefix(`/`)
-      traefik.http.routers.fluidd.entrypoints: web
-
   ## Loadbalancer/Proxy
   traefik:
     image: traefik:v2.5
