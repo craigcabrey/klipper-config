@@ -1,35 +1,5 @@
-## Usecase: Run multiple Printers on the same Host
-##
-## Assumptions: 
-## * I have two printers
-## * One is called slowboi, the other one hugeboi
-## * slowboi is using serial port /dev/ttyUSB0 and webcam /dev/video0
-## * hugeboi is using serial port /dev/ttyUSB1 and webcam /dev/video1
-##
-## About this setup:
-## * Moonraker services for each printer are available via their unique port (8101 and 8201 in this example).
-## * Webcam services for each printer are available via their unique port (8102 and 8202 in this example)
-## * Fluidd is used as Web frontend and is accessible via 80
-## * You'll have to add your printers manually to fluidd via their moonraker ports eg. http://dockerhost:8101 and http://dockerhost:8201
-##
-## Setup:
-## 1. Check out prind and enter the repository
-##      > git clone https://github.com/mkuf/prind/
-##      > cd prind
-## 2. Create config files for each printer and set permissions
-##      > for i in slowboi hugeboi; do cp config/printer.cfg config/${i}.cfg; cp config/moonraker.conf config/${i}.moonraker.conf; done
-##      > chown -R 1000:1000 config
-## 3. Copy this file to the root of the repository, overwriting the original docker-compose.yaml
-##      > cp custom/docker-compose.custom.multiple-printers.yaml docker-compose.yaml
-## 4. For each printer create a klipper, moonraker and webcam service as shown below
-## 5. Make sure each service has a unique 'command' and is referencing the files created by 2.
-## 6. Add your printers config to their corresponding file
-## 7. Set the correct klippy_uds_address in the corresponding *.moonraker.conf
-## 8. Update the Devices used for the webcam services
-## 9. Start the stack
-##      > docker compose up -d
+name: klipper
 
-## Common Templates
 x-klipper-svc: &klipper-svc
   image: mkuf/klipper:latest
   restart: unless-stopped
@@ -61,29 +31,23 @@ x-ustreamer-svc: &ustreamer-svc
 services:
   slowboi-klipper:
     <<: *klipper-svc
-    command: -I printer_data/run/slowboi.klipper.tty -a printer_data/run/slowboi.klipper.sock printer_data/config/slowboi.cfg -l printer_data/logs/slowboi.klippy.log
+    command: -I printer_data/run/slowboi.klipper.tty -a printer_data/run/slowboi.klipper.sock printer_data/config/slowboi/printer.cfg -l printer_data/logs/slowboi.klippy.log
     labels:
       org.prind.service: klipper
       org.prind.printer: slowboi
+    profiles:
+      - garage
 
   slowboi-moonraker:
     <<: *moonraker-svc
-    command: -d printer_data -c printer_data/config/slowboi.moonraker.conf -l printer_data/logs/slowboi.moonraker.log
+    command: -d printer_data -c printer_data/config/slowboi/moonraker.conf -l printer_data/logs/slowboi.moonraker.log
     ports:
       - 8101:7125
     labels:
       org.prind.service: moonraker
       org.prind.printer: slowboi
-      traefik.enable: true
-      traefik.http.services.slowboi-moonraker.loadbalancer.server.port: 7125
-      traefik.http.routers.slowboi-moonraker.rule: PathPrefix(`/slowboi/websocket`,`/slowboi/printer`,`/slowboi/api`,`/slowboi/access`,`/slowboi/machine`,`/slowboi/server`)
-      traefik.http.routers.slowboi-moonraker.entrypoints: web
-      traefik.http.middlewares.slowboi-prefix.stripprefix.prefixes: /slowboi
-      traefik.http.middlewares.cors.headers.accesscontrolallowmethods: '*'
-      traefik.http.middlewares.cors.headers.accessControlAllowOriginList: '*'
-      traefik.http.middlewares.cors.headers.accesscontrolmaxage: 100
-      traefik.http.middlewares.cors.headers.addvaryheader: true
-      traefik.http.routers.slowboi-moonraker.middlewares: slowboi-prefix, cors
+    profiles:
+      - garage
 
   slowboi-webcam:
     <<: *ustreamer-svc
@@ -93,34 +57,28 @@ services:
     labels:
       org.prind.service: webcam
       org.prind.printer: slowboi
-      traefik.enable: true
-      traefik.http.services.slowboi-webcam.loadbalancer.server.port: 8080
-      traefik.http.routers.slowboi-webcam.rule: PathPrefix(`/slowboi/webcam`)
-      traefik.http.routers.slowboi-webcam.entrypoints: web
-      traefik.http.middlewares.slowboi-webcam.stripprefix.prefixes: /slowboi/webcam
-      traefik.http.routers.slowboi-webcam.middlewares: slowboi-webcam
+    profiles:
+      - garage
 
   hugeboi-klipper:
     <<: *klipper-svc
-    command: -I printer_data/run/hugeboi.klipper.tty -a printer_data/run/hugeboi.klipper.sock printer_data/config/hugeboi.cfg -l printer_data/logs/hugeboi.klippy.log
+    command: -I printer_data/run/hugeboi.klipper.tty -a printer_data/run/hugeboi.klipper.sock printer_data/config/hugeboi/printer.cfg -l printer_data/logs/hugeboi.klippy.log
     labels:
       org.prind.service: klipper
       org.prind.printer: hugeboi
+    profiles:
+      - garage
 
   hugeboi-moonraker:
     <<: *moonraker-svc
-    command: -d printer_data -c printer_data/config/hugeboi.moonraker.conf -l printer_data/logs/hugeboi.moonraker.log
+    command: -d printer_data -c printer_data/config/hugeboi/moonraker.conf -l printer_data/logs/hugeboi.moonraker.log
     ports:
       - 8201:7125
     labels:
       org.prind.service: moonraker
       org.prind.printer: hugeboi
-      traefik.enable: true
-      traefik.http.services.moonraker.loadbalancer.server.port: 7125
-      traefik.http.routers.moonraker.rule: PathPrefix(`/hugeboi/websocket`,`/hugeboi/printer`,`/hugeboi/api`,`/hugeboi/access`,`/hugeboi/machine`,`/hugeboi/server`)
-      traefik.http.routers.moonraker.entrypoints: web
-      traefik.http.middlewares.moonraker.stripprefix.prefixes: /hugeboi
-      traefik.http.routers.moonraker.middlewares: moonraker
+    profiles:
+      - garage
 
   hugeboi-webcam:
     <<: *ustreamer-svc
@@ -130,29 +88,57 @@ services:
     labels:
       org.prind.service: webcam
       org.prind.printer: hugeboi
-      traefik.enable: true
-      traefik.http.services.hugeboi-webcam.loadbalancer.server.port: 8080
-      traefik.http.routers.hugeboi-webcam.rule: PathPrefix(`/hugeboi/webcam`)
-      traefik.http.routers.hugeboi-webcam.entrypoints: web
-      traefik.http.middlewares.hugeboi-webcam.stripprefix.prefixes: /hugeboi/webcam
-      traefik.http.routers.hugeboi-webcam.middlewares: hugeboi-webcam
+    profiles:
+      - garage
 
-  ## Loadbalancer/Proxy
-  traefik:
-    image: traefik:v2.5
-    command:
-      - "--accesslog"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-    ports:
-      - "80:80"
+  smolboi-klipper:
+    image: mkuf/klipper:latest
     restart: unless-stopped
+    privileged: true
+    logging:
+      driver: none
+    command: -I printer_data/run/smolboi.klipper.tty -a printer_data/run/smolboi.klipper.sock printer_data/config/smolboi/printer.cfg -l printer_data/logs/smolboi.klippy.log
     volumes:
-        - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - /dev:/dev
+      - ./config:/opt/printer_data/config
+      - run:/opt/printer_data/run
+      - /home/pi/gcode:/opt/printer_data/gcodes
+      - log:/opt/printer_data/logs
     labels:
-      org.prind.service: traefik
+      org.prind.service: klipper
+      org.prind.printer: smolboi
+    profiles:
+      - office
+
+  smolboi-moonraker:
+    image: mkuf/moonraker:latest
+    restart: unless-stopped
+    pid: host
+    command: -d printer_data -c printer_data/config/smolboi/moonraker.conf -l printer_data/logs/smolboi.moonraker.log
+    logging:
+      driver: none
+    depends_on:
+      smolboi-klipper:
+        condition: service_started
+    ports:
+      - 8101:7125
+    volumes:
+      - /dev/null:/opt/klipper/config/null
+      - /dev/null:/opt/klipper/docs/null
+      - /run/dbus:/run/dbus
+      - /run/systemd:/run/systemd
+      - run:/opt/printer_data/run
+      - /home/pi/gcode:/opt/printer_data/gcodes
+      - log:/opt/printer_data/logs
+      - moonraker-db:/opt/printer_data/database
+      - ./config:/opt/printer_data/config
+    labels:
+      org.prind.service: moonraker
+      org.prind.printer: smolboi
+    profiles:
+      - office
 
 volumes:
   run:
+  moonraker-db:
   log:
